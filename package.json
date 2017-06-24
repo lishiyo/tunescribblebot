@@ -1,0 +1,23 @@
+{
+  "name": "12-audiobot",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@ffmpeg-installer/ffmpeg": "^1.0.9",
+    "child_process": "^1.0.2",
+    "dotenv": "^4.0.0",
+    "fluent-ffmpeg": "^2.1.0",
+    "fs": "0.0.1-security",
+    "jsmidgen": "^0.1.5",
+    "path": "^0.12.7",
+    "rita": "^1.1.51",
+    "scribbletune": "^0.9.1",
+    "twit": "^2.2.5"
+  }
+}
