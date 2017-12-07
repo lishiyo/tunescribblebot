@@ -1,17 +1,17 @@
 require('dotenv').config()
 
-var Twit = require('twit');
-var rita = require('rita');
-var midi = require('jsmidgen');
-var fs = require('fs');
-var path = require('path');
-var child_process = require('child_process');
-var ffmpegPath = require('@ffmpeg-installer/ffmpeg');
-var ffmpeg = require('fluent-ffmpeg');
+const Twit = require('twit');
+const rita = require('rita');
+const  midi = require('jsmidgen');
+const fs = require('fs');
+const path = require('path');
+const child_process = require('child_process');
+const ffmpegPath = require('@ffmpeg-installer/ffmpeg');
+const ffmpeg = require('fluent-ffmpeg');
 ffmpeg.setFfmpegPath(ffmpegPath.path);
 
 // @tunescribbler
-var bot = new Twit({
+const bot = new Twit({
     consumer_key: process.env.TWITTER_CONSUMER_KEY,
     consumer_secret: process.env.TWITTER_CONSUMER_SECRET,
     access_token: process.env.TWITTER_ACCESS_TOKEN,
@@ -19,18 +19,22 @@ var bot = new Twit({
     timeout_ms: 60 * 1000
 });
 
-var bot_username = process.env.MENTION; // any tweet with this in it
+// The mention word to listen to - will detect any tweet with this text in it 
+const bot_username = process.env.MENTION;
 
-var IMG_PATH = path.join(process.cwd(), 'black.jpg'); // background image for video file
-var MIDI_FILENAME = 'output.mid';
-var WAV_FILENAME = 'output.wav';
-var MP4_FILENAME = 'output.mp4';
-var MIDI_PATH = path.join(process.cwd(), 'output', MIDI_FILENAME);
-var WAV_PATH = path.join(process.cwd(), 'output', WAV_FILENAME);
-var VID_PATH = path.join(process.cwd(), 'output', MP4_FILENAME);
+const IMG_PATH = path.join(process.cwd(), 'black.jpg'); // background image for video file
+const MIDI_FILENAME = 'output.mid';
+const WAV_FILENAME = 'output.wav';
+const MP4_FILENAME = 'output.mp4';
+const MIDI_PATH = path.join(process.cwd(), 'output', MIDI_FILENAME);
+const WAV_PATH = path.join(process.cwd(), 'output', WAV_FILENAME);
+const VID_PATH = path.join(process.cwd(), 'output', MP4_FILENAME);
 
-// filter the twitter public stream by the word 'mango'.
-var stream = bot.stream('statuses/filter', {
+// flag to avoid converting and uploading multiple at once
+let READY = false;
+
+// filter the twitter public stream by the MENTION word 
+const stream = bot.stream('statuses/filter', {
     track: bot_username
 });
 
@@ -40,6 +44,7 @@ stream.on('connecting', function(response){
 
 stream.on('connected', function(response){
     console.log('connected!');
+    READY = true;
 });
 
 stream.on('error', function(err){
@@ -47,7 +52,12 @@ stream.on('error', function(err){
 });
 
 stream.on('tweet', function(tweet){
-    console.log("on tweet!", tweet.text);
+    console.log("===== on tweet! =====", tweet.text);
+    if (!READY) {
+        console.log("not ready, returning");
+        return;
+    }
+    READY = false;
 
     if (tweet.text.length > 0){
         createMedia(tweet, IMG_PATH, MIDI_PATH, WAV_PATH, VID_PATH, function(err){
@@ -58,7 +68,7 @@ stream.on('tweet', function(tweet){
                 // delete the wave file (err when the program tries to create a wave with file already there)
                 deleteWav(WAV_PATH, function(err){
                     if (err){
-                        console.log(err);
+                        console.log("deleteWave ERROR", err);
                     } else {
                         uploadMedia(tweet, VID_PATH);
                     }
@@ -72,7 +82,7 @@ stream.on('tweet', function(tweet){
 * Map parts of speech to a note. 
 **/
 function compose(taggedTweet, track){
-    var notes = taggedTweet.map(function(tag){
+    let notes = taggedTweet.map(function(tag){
         if (tag.includes('nn') || tag.includes('i')){
             return 'e4';
         }
@@ -156,7 +166,7 @@ function createVideo(IMG_PATH, WAV_PATH, VID_PATH, cb){
 }
 
 function deleteWav(WAV_PATH, cb){
-    var command = "rm ./output/" + WAV_FILENAME;
+    let command = "rm ./output/" + WAV_FILENAME;
     child_process.exec(command, {}, (err, stdout, stderr) => {
         if (err){
             cb(err);
@@ -167,22 +177,21 @@ function deleteWav(WAV_PATH, cb){
 }
 
 // ======= OUTPUT =========
+
 function uploadMedia(tweet, VID_PATH){
     bot.postMediaChunked({ file_path: VID_PATH }, function(err, data, response){
         if (err){
-            console.log(err);
+            console.log("uploadMedia ERROR", err);
         } else {
             console.log("posted video: ", data);
-            var stat = tweet.text.split(bot_username)
-                .join(' ')
-                .trim();
+            let stat = tweet.text.split(bot_username).join(' ').trim();
 
-            var params = {
-                status: '@' + tweet.user.screen_name + ' ' + stat,
-                // status: `scribbling. . . ${stat}`,
-                in_reply_to_status_id: tweet.id_str, // replying to my app
-                media_ids: data.media_id_string
-            }
+                let params = {
+                    status: '@' + tweet.user.screen_name + ' ' + stat,
+                    // status: `scribbling. . . ${stat}`,
+                    in_reply_to_status_id: tweet.id_str, // replying to my app
+                    media_ids: data.media_id_string
+                }
 
             postStatus(params);
         }
@@ -192,10 +201,12 @@ function uploadMedia(tweet, VID_PATH){
 function postStatus(params){
     bot.post('statuses/update', params, function(err, data, response){
         if (err){
-            console.log(err);
+            console.log("postStatus ERROR", err);
         } else {
-            console.log('Bot has posted!');
+            console.log('===== Bot has posted! ===== ');
         }
+
+        READY = true;
     });
 }
 
