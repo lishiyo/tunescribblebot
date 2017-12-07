@@ -30,6 +30,8 @@ const MIDI_PATH = path.join(process.cwd(), 'output', MIDI_FILENAME);
 const WAV_PATH = path.join(process.cwd(), 'output', WAV_FILENAME);
 const VID_PATH = path.join(process.cwd(), 'output', MP4_FILENAME);
 
+const QUARTER_NOTE_UNIT = 128; // standard ticks for a quarter note duration
+
 // flag to avoid converting and uploading multiple at once
 let READY = false;
 
@@ -54,7 +56,6 @@ stream.on('error', function(err){
 stream.on('tweet', function(tweet){
     console.log("===== on tweet! =====", tweet.text);
     if (!READY) {
-        console.log("not ready, returning");
         return;
     }
     READY = false;
@@ -80,25 +81,59 @@ stream.on('tweet', function(tweet){
 
 /**
 * Map parts of speech to a note. 
+* @see https://rednoise.org/rita/reference/PennTags.html
 **/
 function compose(taggedTweet, track){
-    let notes = taggedTweet.map(function(tag){
-        if (tag.includes('nn') || tag.includes('i')){
-            return 'e4';
+    let notes = taggedTweet.map((tag) => {
+        // let's take 6 octaves (2-6), where 4 is middle c
+        let octaveNum = Math.round(Math.random() * (6-2)) + 2;
+        let note = 'c'; 
+
+        if (tag.includes('jj')) { // adjective
+            note = 'd'
         }
-        if (tag.includes('vb')){
-            return 'g4';
+        if (tag.includes('nn') || tag.includes('prp')) { // noun
+            note = 'e';
+        }
+        if (tag.includes('i')) { // preposition
+            note = 'f';
+        }
+        if (tag.includes('vb')){ // verb
+            note = 'g';
+        }
+        if (tag.includes('rb')) { // adverb
+            note = 'a';
+        }
+        if (tag.includes('rp')) { // particles
+            note = 'b';
+        }
+        if (tag.includes('w')) { // wh
+            note = 'c';
         }
 
-        return 'c4';
+        return note + octaveNum;
     });
 
-    notes.forEach(function(note){
-        // channel, notestring, duration (128 = quarter note)
-        track.addNote(0, note, 128);
+    notes.forEach((note) => {
+        // channel, pitch, duration (128 = quarter note)
+        let duration = getDurationInTicks(Math.random() * 4, QUARTER_NOTE_UNIT);
+        track.addNote(0, note, duration);
     });
 
     return track;
+}
+
+// Given a note length between 0-4 where 1 = quarter note, and the standard quarter note's duration in ticks, return the duration in ticks
+function getDurationInTicks(time, quarterUnit) {
+    if (time < 1) {
+        return quarterUnit;
+    } else if (time > 1 && time < 2) {
+        return quarterUnit*2;
+    } else if (time > 2 && time < 3) {
+        return quarterUnit*3;
+    } else {
+        return quarterUnit*4;
+    }
 }
 
 // ========== MEDIA PROCESSING =========
@@ -124,17 +159,17 @@ function createMedia(tweet, IMG_PATH, MIDI_PATH, WAV_PATH, VID_PATH, cb){
 }
 
 function createMidi(tweet, MIDI_PATH, cb){
-    var file = new midi.File();
-    var track = new midi.Track();
+    let file = new midi.File();
+    let track = new midi.Track();
     file.addTrack(track);
 
-    var cleanedText = rita.RiTa
+    let cleanedText = rita.RiTa
         .tokenize(cleanText(tweet.text))
         .filter(isNotPunctuation)
         .join(' ');
 
     // map POS to notes, add to track
-    var taggedTweet = getPartsOfSpeech(cleanedText);
+    let taggedTweet = getPartsOfSpeech(cleanedText);
     compose(taggedTweet, track);
 
     fs.writeFile(MIDI_PATH, file.toBytes(), { encoding: 'binary' }, cb);
